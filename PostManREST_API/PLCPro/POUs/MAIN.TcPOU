@@ -35,12 +35,5 @@ MockServer();
 
 ]]></ST>
     </Implementation>
-    <LineIds Name="MAIN">
-      <LineId Id="184" Count="0" />
-      <LineId Id="186" Count="0" />
-      <LineId Id="214" Count="0" />
-      <LineId Id="213" Count="0" />
-      <LineId Id="16" Count="0" />
-    </LineIds>
   </POU>
 </TcPlcObject>

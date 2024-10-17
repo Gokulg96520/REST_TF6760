@@ -1,0 +1,165 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="EtonSmartBreaker" Id="{9c454079-b875-446e-bb45-6e64d943bda1}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM EtonSmartBreaker
+VAR
+	//Eaton Server
+	fbhttpClient : FB_IotHttpClient := (sHostName:='api.em.eaton.com',
+								  	bKeepAlive:=TRUE, tConnectionTimeout:=T#10S);		
+	
+	//Get Request
+	fbRequest : FB_IotHttpRequest;		
+	state : (IDLE, SEND_REQUEST, WAIT_FOR_RESPONSE, READ_RESPONSE,ERROR,ADD_HEADER);			
+	sendGetRequest: BOOL;
+	debugContent : STRING(2000);
+	fbJsonParser : FB_JsonDomParser;
+	jsonDoc				: SJsonValue;
+	jsonArgsMember				: SJsonValue;
+	jsonMachineName : SJsonValue;
+	results : STRING;
+	
+	//Header
+	fbHeaderField : FB_IotHttpHeaderFieldMap;
+	sAuthoToken : STRING(2000);
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Init client parameters at startup
+IF NOT fbhttpClient.bConfigured THEN 
+	fbhttpClient.nHostPort:= 443; //80 for http  443 For https
+	fbhttpClient.stTLS.bNoServerCertCheck:= TRUE;
+END_IF
+
+	
+//Get Request
+CASE state OF
+	
+	//Send Get Request
+	IDLE: 
+		IF sendGetRequest THEN
+			state := ADD_HEADER;
+			sendGetRequest := FALSE;
+		END_IF
+	
+	//Create Autorization Header File
+	ADD_HEADER:
+		sAuthoToken := 'Bearer eyJraWQiOiJFZHViWGxfQVg2emd3R044b0dOa21VRUxRWHEyOUdOQzNJUjFrcFdtVGZBIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULjhjYU5jckV2aU56UHBKNEk1bEQ2YVh0amxjVTJ2TG9xQ29wcmNWd0ExdVUiLCJpc3MiOiJodHRwczovL2lkLmVhdG9uLmNvbS9vYXV0aDIvYXVzOWQ4dnhlOFZNWTFod0M0eDciLCJhdWQiOiJhcGk6Ly9ibGMiLCJpYXQiOjE3Mjc5MzE0MjMsImV4cCI6MTcyNzkzNTAyMywiY2lkIjoiMG9hbTgzZHR2dVdnV1FTNjk0eDciLCJzY3AiOlsiY2xpZW50X2NyZWQiXSwiYWRvcHRlcmlkIjoiYjgzYjJlZjItMmJhZi1iZTEzLTNmOGItZGI3ZmQyNWYyMDE3Iiwic3ViIjoiMG9hbTgzZHR2dVdnV1FTNjk0eDciLCJibGNzYWlkIjoiMGEzYmVhYTctZTE1ZS00N2U1LTlhMmItY2ZjYjE3ZGU1ZDQ0IiwibmFtZSI6IiAifQ.00_Ss224pRcBLPLgnpvzWnFV0GmS_tGB9qeZJu8OeWvd7kSRdSMygCW7wede4vqgu5Ubb5BiEe9cokUyDZlxNh-5BjZUgMOYV3XZXAJ5Rhxdnk4yjf6ERhz2HZ8PuB8aCMRdxaAe6N6f_PemYtNiTWQ7DWPPc7aFGsk2gy1FRxRTvX5XlgX2cIQoJKBBEq6lzWZOUW8Jl9Aw2f90uQ6BSJRAfazYmr6yWAjuQoOGHQlXHmZxGf1fEm9NqKGUeh5tYEAE-YueOLzh__bxsjUHR1NJwBrpN3sa3_VFoNzfGEunkiQ1RyFZyzoUS3xEB2QbCjJTgo47z_0nJobPwB3EDg';
+		fbHeaderField.AddField(sField:='Em-Api-Subscription-Key',sValue:='666585a90d81461da51fb9ed6fa14c7b',bAppendValue:=FALSE);
+		fbHeaderField.AddField(sField:='Authorization',sValue:=sAuthoToken,bAppendValue:=FALSE);
+		//fbHeaderField.AddField(sField:='Accept',sValue:='application/json',bAppendValue:=FALSE);
+		//fbHeaderField.AddField(sField:='Content-Type',sValue:='application/json',bAppendValue:=FALSE);
+		//fbHeaderField.AddField(sField:='Cache-Control',sValue:='no-cache',bAppendValue:=FALSE);
+		//fbHeaderField.AddField(sField:='Connection',sValue:='keep-alive',bAppendValue:=FALSE);
+		state := SEND_REQUEST;
+	
+	//Send Get Request
+	SEND_REQUEST:                                                                             
+		IF fbRequest.SendRequest(sUri:='/api/v1/devices/c595f832-81c8-44c9-ba4a-0b3c9b980dc4/breaker/remoteHandle/position', 
+			fbClient:=fbhttpClient, eRequestType:=ETcIotHttpRequestType.HTTP_Get, 
+				0, 0,fbHeader:=fbHeaderField ) THEN
+			state := WAIT_FOR_RESPONSE;
+		END_IF
+
+	//Wait for Response
+	WAIT_FOR_RESPONSE:
+
+		IF NOT fbRequest.bBusy THEN
+			IF fbRequest.bError THEN
+				state := ERROR;
+			ELSE
+				state := READ_RESPONSE;
+			END_IF
+		END_IF
+	
+	//Read Response
+	READ_RESPONSE:
+	
+		//Get Response Content
+		fbRequest.GetContent(pContent:= ADR(debugContent), nContentSize:= SIZEOF(debugContent), bSetNullTermination:= TRUE);
+		
+		//Check Status 
+		IF fbRequest.nStatusCode >= 200 AND fbRequest.nStatusCode < 300 THEN
+			jsonDoc:= fbRequest.GetJsonDomContent(fbJsonParser);
+			
+			//Check response has data in body
+			IF jsonDoc <> 0 THEN
+				
+				//Check data key is present 
+				IF fbJsonParser.HasMember(jsonDoc, 'data') THEN
+					
+					//Get Value for the specifed key
+					jsonArgsMember:= fbJsonParser.FindMember(jsonDoc, 'data');
+					
+					//Check wether data has an position key
+					IF fbJsonParser.HasMember(jsonArgsMember, 'position')  THEN
+						
+						//Get Value for the specifed key
+						jsonMachineName:= fbJsonParser.FindMember(jsonArgsMember, 'position');
+							
+							//Check data is a String
+							IF fbJsonParser.IsString(jsonMachineName) THEN			
+
+								//Get the Data 				
+								results:= fbJsonParser.GetString(jsonMachineName);									
+							END_IF
+					END_IF
+				END_IF
+			END_IF
+		END_IF
+		
+		state := IDLE;
+		
+	ERROR:
+		//Error Handling 
+		
+		
+END_CASE
+
+//Cyclic Client 
+fbhttpClient.Execute();]]></ST>
+    </Implementation>
+    <LineIds Name="EtonSmartBreaker">
+      <LineId Id="24" Count="9" />
+      <LineId Id="216" Count="0" />
+      <LineId Id="34" Count="4" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="217" Count="0" />
+      <LineId Id="121" Count="0" />
+      <LineId Id="168" Count="0" />
+      <LineId Id="123" Count="0" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="213" Count="2" />
+      <LineId Id="211" Count="0" />
+      <LineId Id="124" Count="0" />
+      <LineId Id="127" Count="0" />
+      <LineId Id="218" Count="0" />
+      <LineId Id="51" Count="5" />
+      <LineId Id="219" Count="0" />
+      <LineId Id="57" Count="10" />
+      <LineId Id="220" Count="0" />
+      <LineId Id="68" Count="1" />
+      <LineId Id="221" Count="0" />
+      <LineId Id="70" Count="1" />
+      <LineId Id="222" Count="0" />
+      <LineId Id="72" Count="2" />
+      <LineId Id="223" Count="0" />
+      <LineId Id="75" Count="1" />
+      <LineId Id="224" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="225" Count="1" />
+      <LineId Id="78" Count="1" />
+      <LineId Id="227" Count="0" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="228" Count="1" />
+      <LineId Id="81" Count="1" />
+      <LineId Id="230" Count="0" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="232" Count="0" />
+      <LineId Id="231" Count="0" />
+      <LineId Id="84" Count="5" />
+      <LineId Id="233" Count="0" />
+      <LineId Id="90" Count="8" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

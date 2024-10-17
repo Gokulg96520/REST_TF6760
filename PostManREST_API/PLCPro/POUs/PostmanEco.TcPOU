@@ -1,0 +1,96 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="PostmanEco" Id="{28e9cedc-1bc3-4cf5-b118-2145333f5c79}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PostmanEco
+VAR
+	//Client
+	fbhttpClient : FB_IotHttpClient := (sHostName:='postman-echo.com',
+								  	bKeepAlive:=TRUE, tConnectionTimeout:=T#10S);
+	//Get Request
+	fbRequest : FB_IotHttpRequest;		
+	state : (IDLE, SEND_REQUEST, WAIT_FOR_RESPONSE, READ_RESPONSE,ERROR,FORMATER);			
+	sendGetRequest: BOOL;
+	debugContent : STRING(511);
+	fbJsonParser : FB_JsonDomParser;
+	jsonDoc				: SJsonValue;
+	jsonArgsMember				: SJsonValue;
+	jsonFoo2 : SJsonValue;
+	results : STRING;
+	
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Init client parameters at startup
+IF NOT fbhttpClient.bConfigured THEN 
+	fbhttpClient.nHostPort:= 443; //80 for http  443 For https
+	fbhttpClient.stTLS.bNoServerCertCheck:= TRUE;
+END_IF
+
+	
+//Get Request
+CASE state OF
+	
+	IDLE:
+		IF sendGetRequest THEN
+			state := SEND_REQUEST;
+			sendGetRequest := FALSE;
+		END_IF
+		
+	SEND_REQUEST:                                                                                      
+		IF fbRequest.SendRequest(sUri:='/get?foo1=bar1&foo2=bar2', 
+			fbClient:=fbhttpClient, eRequestType:=ETcIotHttpRequestType.HTTP_Get, 0, 0, 0) THEN
+			state := WAIT_FOR_RESPONSE;
+		END_IF
+
+	WAIT_FOR_RESPONSE:
+		IF NOT fbRequest.bBusy THEN
+			IF fbRequest.bError THEN
+				state := ERROR;
+			ELSE
+				state := READ_RESPONSE;
+			END_IF
+		END_IF
+		
+	READ_RESPONSE:
+	
+		fbRequest.GetContent(pContent:= ADR(debugContent), nContentSize:= SIZEOF(debugContent), bSetNullTermination:= TRUE);
+		
+		IF fbRequest.nStatusCode >= 200 AND fbRequest.nStatusCode < 300 THEN
+			jsonDoc:= fbRequest.GetJsonDomContent(fbJsonParser);
+			
+			IF jsonDoc <> 0 THEN
+				
+				IF fbJsonParser.HasMember(jsonDoc, 'args') THEN
+					jsonArgsMember:= fbJsonParser.FindMember(jsonDoc, 'args');
+					
+					IF fbJsonParser.HasMember(jsonArgsMember, 'foo2')  THEN
+						jsonFoo2:= fbJsonParser.FindMember(jsonArgsMember, 'foo2');
+						
+							IF fbJsonParser.IsString(jsonFoo2) THEN							
+								results:= fbJsonParser.GetString(jsonFoo2);									
+							END_IF
+					END_IF
+				END_IF
+			END_IF
+		END_IF
+		state := IDLE;
+		
+	ERROR:
+		//
+		
+		
+END_CASE
+
+//Cyclic Client 
+fbhttpClient.Execute();]]></ST>
+    </Implementation>
+    <LineIds Name="PostmanEco">
+      <LineId Id="29" Count="15" />
+      <LineId Id="56" Count="2" />
+      <LineId Id="60" Count="3" />
+      <LineId Id="65" Count="38" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

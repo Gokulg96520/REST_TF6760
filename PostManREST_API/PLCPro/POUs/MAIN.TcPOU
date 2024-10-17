@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="MAIN" Id="{3d5404ea-3a8c-486d-8750-2451566905c2}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	//Client
+	//fbhttpClient : FB_IotHttpClient := (sHostName:='postman-echo.com',
+	//							  	bKeepAlive:=TRUE, tConnectionTimeout:=T#10S);
+									
+	//Eton
+	fbhttpClient : FB_IotHttpClient := (sHostName:='api.em.eaton.com',
+								  	bKeepAlive:=TRUE, tConnectionTimeout:=T#10S);		
+				
+	//Get Request
+	fbRequest : FB_IotHttpRequest;		
+	state : (IDLE, SEND_REQUEST, WAIT_FOR_RESPONSE, READ_RESPONSE,ERROR,FORMATER);			
+	sendGetRequest: BOOL;
+	debugContent : STRING(511);
+	fbJsonParser : FB_JsonDomParser;
+	jsonDoc				: SJsonValue;
+	jsonArgsMember				: SJsonValue;
+	jsonFoo2 : SJsonValue;
+	results : STRING;
+	
+	//JSON Formater
+	fbJsonWriter         : FB_JsonSaxWriter;
+	sendData                : STRING(2000);
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//PostmanEco();
+MockServer();
+//EtonSmartBreaker();
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="184" Count="0" />
+      <LineId Id="186" Count="0" />
+      <LineId Id="214" Count="0" />
+      <LineId Id="213" Count="0" />
+      <LineId Id="16" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
